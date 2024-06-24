@@ -43,7 +43,7 @@ class YoutubeConfiguration {
     @Bean
     ChannelContentProducer channelContentProducer(YoutubeClient youtubeClient) {
         return new ChannelContentProducer(youtubeClient,
-                "@coffeesoftware");
+                "UC7yfnfvEUlXUIfm8rGLwZdA");
 
     }
 
