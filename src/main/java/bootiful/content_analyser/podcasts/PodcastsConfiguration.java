@@ -56,7 +56,7 @@ class PodbeanPodcasts implements ContentProducer {
     public Collection<Content> contentFrom(Instant instant) {
         return podcastsSince(instant)
                 .stream()
-                .map(pod -> new Content(pod.title(), pod.url(), pod.date(), "podcast"))
+                .map(pod -> new Content(pod.title(), pod.url(), pod.date(), "podcast", 0))
                 .toList();
     }
 }

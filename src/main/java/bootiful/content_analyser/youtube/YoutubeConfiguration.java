@@ -1,154 +1,304 @@
 package bootiful.content_analyser.youtube;
 
 import bootiful.content_analyser.Content;
+import bootiful.content_analyser.ContentAnalyserProperties;
 import bootiful.content_analyser.ContentProducer;
-import org.springframework.context.annotation.Configuration;
-
-import java.time.Instant;
-import java.util.Collection;
-import java.util.List;
-
-@Configuration
-class YoutubeConfiguration {
-
-
-}
-import org.springframework.boot.CommandLineRunner;
-import org.springframework.boot.SpringApplication;
-import org.springframework.boot.autoconfigure.SpringBootApplication;
-import org.springframework.context.annotation.Bean;
-import org.springframework.web.client.RestTemplate;
-
-@SpringBootApplication
-public class YouTubeSearchApplication implements CommandLineRunner {
-
-    private final YouTubeClient youTubeClient;
-
-    public YouTubeSearchApplication(YouTubeClient youTubeClient) {
-        this.youTubeClient = youTubeClient;
-    }
-
-    public static void main(String[] args) {
-        SpringApplication.run(YouTubeSearchApplication.class, args);
-    }
-
-    @Override
-    public void run(String... args) throws Exception {
-        if (args.length > 0) {
-            String query = args[0];
-            YouTubeResponse response = youTubeClient.searchVideos(query);
-            response.getItems().forEach(item -> {
-                String videoId = item.getId().getVideoId();
-                System.out.println("Title: " + item.getSnippet().getTitle());
-                System.out.println("Description: " + item.getSnippet().getDescription());
-                System.out.println("Video ID: " + videoId);
-
-                // Fetch and display video statistics
-                VideoStatsResponse statsResponse = youTubeClient.getVideoStatistics(videoId);
-                if (statsResponse != null && !statsResponse.getItems().isEmpty()) {
-                    String viewCount = statsResponse.getItems().get(0).getStatistics().getViewCount();
-                    System.out.println("View Count: " + viewCount);
-                }
-
-                System.out.println("----");
-            });
-        } else {
-            System.out.println("Please provide a search query.");
-        }
-    }
-
-    @Bean
-    public RestTemplate restTemplate() {
-        return new RestTemplate();
-    }
-}
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
-
-import java.util.List;
-
-@JsonIgnoreProperties(ignoreUnknown = true)
-public class VideoStatsResponse {
-    private List<Item> items;
-
-    public List<Item> getItems() {
-        return items;
-    }
-
-    public void setItems(List<Item> items) {
-        this.items = items;
-    }
-
-    @JsonIgnoreProperties(ignoreUnknown = true)
-    public static class Item {
-        private Statistics statistics;
-
-        public Statistics getStatistics() {
-            return statistics;
-        }
-
-        public void setStatistics(Statistics statistics) {
-            this.statistics = statistics;
-        }
-
-        @JsonIgnoreProperties(ignoreUnknown = true)
-        public static class Statistics {
-            private String viewCount;
-
-            public String getViewCount() {
-                return viewCount;
-            }
-
-            public void setViewCount(String viewCount) {
-                this.viewCount = viewCount;
-            }
-        }
-    }
-}
-import org.springframework.stereotype.Service;
+import org.springframework.aot.hint.annotation.RegisterReflectionForBinding;
+import org.springframework.boot.web.client.RestTemplateBuilder;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.util.Assert;
 import org.springframework.web.client.RestTemplate;
 import org.springframework.web.util.UriComponentsBuilder;
 
-@Service
-public class YouTubeClient {
-    private static final String API_KEY = "YOUR_YOUTUBE_API_KEY"; // Replace with your YouTube API key
-    private static final String YOUTUBE_API_URL = "https://www.googleapis.com/youtube/v3/search";
-    private static final String YOUTUBE_VIDEO_API_URL = "https://www.googleapis.com/youtube/v3/videos";
+import java.net.URI;
+import java.net.URL;
+import java.time.Instant;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Date;
+import java.util.List;
 
-    private final RestTemplate restTemplate;
 
-    public YouTubeClient(RestTemplate restTemplate) {
-        this.restTemplate = restTemplate;
+@Configuration
+@RegisterReflectionForBinding({YoutubeResponse.class, VideoStatsResponse.class})
+class YoutubeConfiguration {
+
+    @Bean
+    YoutubeClient youTubeClient(RestTemplate restTemplate, ContentAnalyserProperties properties) {
+        return new YoutubeClient(restTemplate, properties.youtubeApiKey());
     }
 
-    public YouTubeResponse searchVideos(String query) {
-        String url = UriComponentsBuilder.fromHttpUrl(YOUTUBE_API_URL)
-                .queryParam("part", "snippet")
-                .queryParam("q", query)
-                .queryParam("key", API_KEY)
-                .queryParam("maxResults", 5)
-                .toUriString();
+    @Bean
+    RestTemplate restTemplate(RestTemplateBuilder builder) {
+        return builder.build();
+    }
 
-        return restTemplate.getForObject(url, YouTubeResponse.class);
+    // @Bean
+    PlaylistContentProducer playlistContentProducer(YoutubeClient youtubeClient) {
+        return new PlaylistContentProducer(youtubeClient, "PLgGXSWYM2FpPw8rV0tZoMiJYSCiLhPnOc");
+    }
+
+    @Bean
+    ChannelContentProducer channelContentProducer(YoutubeClient youtubeClient) {
+        return new ChannelContentProducer(youtubeClient,
+                "@coffeesoftware");
+
+    }
+
+
+}
+
+@JsonIgnoreProperties(ignoreUnknown = true)
+record VideoStatsResponse(List<Item> items) {
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    record Item(Statistics statistics) {
+
+        @JsonIgnoreProperties(ignoreUnknown = true)
+        record Statistics(String viewCount) {
+        }
+    }
+}
+
+
+@JsonIgnoreProperties(ignoreUnknown = true)
+record YoutubeResponse(List<Item> items) {
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    record Item(Id id, Snippet snippet) {
+
+        @JsonIgnoreProperties(ignoreUnknown = true)
+        record Id(String videoId) {
+        }
+
+        @JsonIgnoreProperties(ignoreUnknown = true)
+        record Snippet(String title, String description, String publishedAt) {
+        }
+    }
+}
+
+
+class YoutubeClient {
+
+    private static final String YOUTUBE_VIDEO_API_URL = "https://www.googleapis.com/youtube/v3/videos";
+
+    private static final String YOUTUBE_PLAYLIST_ITEMS_API_URL = "https://www.googleapis.com/youtube/v3/playlistItems";
+
+    private static final String YOUTUBE_API_URL = "https://www.googleapis.com/youtube/v3";
+
+    private final int max = 500;
+
+    private final RestTemplate restTemplate;
+    private final String apiKey;
+
+    YoutubeClient(RestTemplate restTemplate, String apiKey) {
+        this.restTemplate = restTemplate;
+        this.apiKey = apiKey;
     }
 
     public VideoStatsResponse getVideoStatistics(String videoId) {
-        String url = UriComponentsBuilder.fromHttpUrl(YOUTUBE_VIDEO_API_URL)
+        var url = UriComponentsBuilder
+                .fromHttpUrl(YOUTUBE_VIDEO_API_URL)
                 .queryParam("part", "statistics")
                 .queryParam("id", videoId)
-                .queryParam("key", API_KEY)
+                .queryParam("key", this.apiKey)
                 .toUriString();
 
         return restTemplate.getForObject(url, VideoStatsResponse.class);
     }
+
+    public PlaylistItemsResponse getPlaylistItems(String playlistId) {
+        var url = UriComponentsBuilder
+                .fromHttpUrl(YOUTUBE_PLAYLIST_ITEMS_API_URL)
+                .queryParam("part", "snippet")
+                .queryParam("playlistId", playlistId)
+                .queryParam("key", this.apiKey)
+                .queryParam("maxResults", this.max)
+                .toUriString();
+
+        return restTemplate.getForObject(url, PlaylistItemsResponse.class);
+    }
+//
+
+    public ChannelResponse getChannelById(String channelId) {
+        var url = UriComponentsBuilder.fromHttpUrl(YOUTUBE_API_URL + "/channels")
+                .queryParam("part", "contentDetails")
+                .queryParam("id", channelId)
+                .queryParam("key", this.apiKey)
+                .toUriString();
+
+        return  this.restTemplate.getForObject(url, ChannelResponse.class);
+    }
+
+    public PlaylistItemsResponse getPlaylistItems(String playlistId, String pageToken) {
+        var url = UriComponentsBuilder.fromHttpUrl(YOUTUBE_API_URL + "/playlistItems")
+                .queryParam("part", "snippet")
+                .queryParam("playlistId", playlistId)
+                .queryParam("key", this.apiKey)
+                .queryParam("maxResults", 50)
+                .queryParam("pageToken", pageToken)
+                .toUriString();
+
+        return this.restTemplate.getForObject(url, PlaylistItemsResponse.class);
+    }
+
+    public List<VideoInfo> getVideosByChannelId(String channelId) {
+        var channelResponse = this.getChannelById(channelId);
+        if (channelResponse == null || channelResponse.items().isEmpty()) {
+            throw new RuntimeException("Channel not found.");
+        }
+        var uploadsPlaylistId = channelResponse.items().getFirst()
+                .contentDetails().relatedPlaylists().uploads();
+        return this.getVideosFromPlaylist(uploadsPlaylistId);
+    }
+
+    public List<VideoInfo> getVideosFromPlaylist(String playlistId) {
+        var videos = new ArrayList<VideoInfo>();
+        var nextPageToken = (String) null;
+        do {
+            var playlistItemsResponse = this.getPlaylistItems(playlistId, nextPageToken);
+            nextPageToken = playlistItemsResponse.nextPageToken();
+            for (var item : playlistItemsResponse.items()) {
+                var videoId = item.snippet().resourceId().videoId();
+                var statsResponse = this.getVideoStatistics(videoId);
+                var viewCount = statsResponse.items().getFirst().statistics().viewCount();
+                videos.add(new VideoInfo(item.snippet().title(), item.snippet().description(),
+                        Instant.parse(item.snippet().publishedAt()), viewCount, videoId));
+            }
+        }//
+        while (nextPageToken != null);
+        return videos;
+    }
+
 }
 
 
-class YoutubeVideos implements ContentProducer {
-
-
-
-  @Override
-  public Collection<Content> contentFrom(Instant instant) {
-    return List.of();
-  }
+@JsonIgnoreProperties(ignoreUnknown = true)
+record ChannelResponse(List<Item> items) {
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public record Item(String id, ContentDetails contentDetails) {
+        @JsonIgnoreProperties(ignoreUnknown = true)
+        public record ContentDetails(RelatedPlaylists relatedPlaylists) {
+            @JsonIgnoreProperties(ignoreUnknown = true)
+            public record RelatedPlaylists(String uploads) {
+            }
+        }
+    }
 }
+
+
+@JsonIgnoreProperties(ignoreUnknown = true)
+record PlaylistItemsResponse(List<Item> items, String nextPageToken) {
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    record Item(Snippet snippet) {
+        @JsonIgnoreProperties(ignoreUnknown = true)
+        record Snippet(String title, String description,
+                       String publishedAt,
+                       ResourceId resourceId) {
+            @JsonIgnoreProperties(ignoreUnknown = true)
+            public record ResourceId(String videoId) {
+            }
+        }
+    }
+}
+
+
+class ChannelContentProducer implements ContentProducer {
+
+    private final YoutubeClient youtubeClient;
+
+    private final String channelId;
+
+    ChannelContentProducer(YoutubeClient client, String channelId) {
+        this.youtubeClient = client;
+        this.channelId = channelId;
+        Assert.notNull(this.channelId, "the channel name must not be null");
+        Assert.notNull(this.youtubeClient, "the youtubeClient must not be null");
+    }
+
+    @Override
+    public Collection<Content> contentFrom(Instant instant) {
+
+        var list = this.youtubeClient
+                .getVideosByChannelId(this.channelId)
+                .stream()
+                .toList();
+
+        return list
+                .stream()
+                .map(vi -> new Content(vi.title(),
+                        youtubeVideoUrlFor(vi.videoId()),
+                        new Date(vi.publishedAt().toEpochMilli()),
+                        "video",
+                        Integer.parseInt(vi.viewCount())
+                ))
+                .toList();
+    }
+
+    private static URL youtubeVideoUrlFor(String videoId) {
+        try {
+            return new URI("https://www.youtube.com/watch?v=" + videoId).toURL();
+        } //
+        catch (Exception e) {
+            throw new RuntimeException(e);
+        }
+    }
+}
+
+/**
+ * @author Josh Long
+ */
+class PlaylistContentProducer implements ContentProducer {
+
+    private final YoutubeClient youtubeClient;
+    private final String playlistId;
+
+    PlaylistContentProducer(YoutubeClient youtubeClient, String playlistId) {
+        this.youtubeClient = youtubeClient;
+        this.playlistId = playlistId;
+    }
+
+    @Override
+    public Collection<Content> contentFrom(Instant instant) {
+        var playlistItems = this.youtubeClient
+                .getPlaylistItems(this.playlistId);
+        return playlistItems
+                .items()
+                .stream()
+                .map(item -> playlistItemToContent(this.youtubeClient, item))
+                .toList();
+    }
+
+    private static Content playlistItemToContent(YoutubeClient youtubeClient, PlaylistItemsResponse.Item item) {
+        var snippet = item.snippet();
+        var videoId = item.snippet().resourceId().videoId();
+        return new Content(
+                item.snippet().title(),
+                youtubeVideoUrlFor(videoId),
+                new Date(Instant.parse(snippet.publishedAt()).toEpochMilli()),
+                "video",
+                Integer.parseInt(youtubeClient.getVideoStatistics(videoId).items().getFirst().statistics().viewCount())
+        );
+    }
+
+
+    private static URL youtubeVideoUrlFor(String videoId) {
+        try {
+            return new URI("https://www.youtube.com/watch?v=" + videoId).toURL();
+        } //
+        catch (Exception e) {
+            throw new RuntimeException(e);
+        }
+    }
+}
+
+record VideoInfo(String title,
+                 String description,
+                 Instant publishedAt,
+                 String viewCount,
+                 String videoId) {
+
+}
+

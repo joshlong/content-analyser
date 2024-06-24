@@ -5,6 +5,7 @@ import org.apache.commons.csv.CSVPrinter;
 import org.springframework.boot.ApplicationRunner;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.core.io.FileSystemResource;
 import org.springframework.core.io.Resource;
@@ -27,6 +28,7 @@ import java.util.*;
  * todo: podbean podcasts
  */
 @SpringBootApplication
+@EnableConfigurationProperties(ContentAnalyserProperties.class)
 public class ContentAnalyserApplication {
 
     public static void main(String[] args) {
@@ -64,7 +66,7 @@ public class ContentAnalyserApplication {
         contents.sort(Comparator.comparing(Content::date));
 
         // write it all out
-        var HEADERS = "NAME,CONTENT TYPE,EXPORT INDICATOR,DATE".split(",");
+        var HEADERS = "NAME,CONTENT TYPE,EXPORT INDICATOR,DATE,VIEWS".split(",");
         var sw = new StringWriter();
         var csvFormat = CSVFormat.DEFAULT.builder()
                 .setHeader(HEADERS)
@@ -72,7 +74,8 @@ public class ContentAnalyserApplication {
         try (var printer = new CSVPrinter(sw, csvFormat)) {
             for (var ts : contents) {
                 var list = List.of(ts.title(), ts.type(),
-                        "export for reporting", dateToString(ts.date()), ts.url().toString());
+                        "export for reporting", dateToString(ts.date()), ts.url().toString(),
+                        Integer.toString(ts.views()));
                 printer.printRecord(list);
             }
         }
@@ -93,4 +96,5 @@ public class ContentAnalyserApplication {
         return zonedDateTime.toInstant();
     }
 }
+
 
