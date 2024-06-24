@@ -1,12 +1,20 @@
 package bootiful.content_analyser;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import org.apache.commons.csv.CSVFormat;
 import org.apache.commons.csv.CSVPrinter;
+import org.springframework.aot.hint.MemberCategory;
+import org.springframework.aot.hint.RuntimeHints;
+import org.springframework.aot.hint.RuntimeHintsRegistrar;
+import org.springframework.aot.hint.TypeReference;
 import org.springframework.boot.ApplicationRunner;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.ClassPathScanningCandidateComponentProvider;
+import org.springframework.context.annotation.ImportRuntimeHints;
+import org.springframework.core.env.Environment;
 import org.springframework.core.io.FileSystemResource;
 import org.springframework.core.io.Resource;
 import org.springframework.util.Assert;
@@ -28,15 +36,17 @@ import java.util.*;
  * todo: podbean podcasts
  */
 @SpringBootApplication
+@ImportRuntimeHints(Hints.class)
 @EnableConfigurationProperties(ContentAnalyserProperties.class)
 public class ContentAnalyserApplication {
+
 
     public static void main(String[] args) {
         SpringApplication.run(ContentAnalyserApplication.class, args);
     }
 
     @Bean
-    ApplicationRunner contentApplicationRunner(Map<String, ContentProducer> producerMap) {
+    ApplicationRunner contentApplicationRunner(Environment environment, Map<String, ContentProducer> producerMap) {
         return args -> {
             var start = beginningOfTheYear();
             var file = new File(new File(System.getenv("HOME"), "Desktop"), "csv");
@@ -98,3 +108,36 @@ public class ContentAnalyserApplication {
 }
 
 
+class Hints implements RuntimeHintsRegistrar {
+
+    @Override
+    public void registerHints(RuntimeHints hints, ClassLoader classLoader) {
+        try {
+            findJsonTypes().forEach(tr -> hints.reflection().registerType(tr, MemberCategory.values()));
+        } //
+        catch (Exception e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    private static Collection<TypeReference> findJsonTypes() {
+        var set = new HashSet<String>();
+        var scanner = new ClassPathScanningCandidateComponentProvider(false);
+        scanner.addExcludeFilter((metadataReader, metadataReaderFactory) -> {
+            var annotationTypes = metadataReader
+                    .getAnnotationMetadata()
+                    .getAnnotationTypes();
+            var hasJsonIgnore = annotationTypes
+                    .contains(JsonIgnoreProperties.class.getName());
+            if (hasJsonIgnore) {
+                set.add(metadataReader.getClassMetadata().getClassName());
+            }
+            return hasJsonIgnore;
+        });
+        scanner.findCandidateComponents(ContentAnalyserApplication.class.getPackageName());
+        return set
+                .stream()
+                .map(TypeReference::of)
+                .toList();
+    }
+}

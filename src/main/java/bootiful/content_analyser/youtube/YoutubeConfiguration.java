@@ -20,10 +20,22 @@ import java.util.Collection;
 import java.util.Date;
 import java.util.List;
 
+/**
+ * @author Josh Long
+ */
 
 @Configuration
-@RegisterReflectionForBinding({YoutubeResponse.class, VideoStatsResponse.class})
+@RegisterReflectionForBinding({
+        YoutubeResponse.class,
+        ChannelResponse.class,
+        VideoStatsResponse.class,
+        VideoInfo.class,
+        PlaylistItemsResponse.class
+})
 class YoutubeConfiguration {
+
+
+
 
     @Bean
     YoutubeClient youTubeClient(RestTemplate restTemplate, ContentAnalyserProperties properties) {
@@ -35,18 +47,26 @@ class YoutubeConfiguration {
         return builder.build();
     }
 
-    // @Bean
+    @Bean
     PlaylistContentProducer playlistContentProducer(YoutubeClient youtubeClient) {
-        return new PlaylistContentProducer(youtubeClient, "PLgGXSWYM2FpPw8rV0tZoMiJYSCiLhPnOc");
+        var springtipsPlaylist = "PLgGXSWYM2FpPw8rV0tZoMiJYSCiLhPnOc";
+        return new PlaylistContentProducer(youtubeClient, springtipsPlaylist);
     }
 
     @Bean
     ChannelContentProducer channelContentProducer(YoutubeClient youtubeClient) {
-        return new ChannelContentProducer(youtubeClient,
-                "UC7yfnfvEUlXUIfm8rGLwZdA");
-
+        //var springsourcedev = "UC7yfnfvEUlXUIfm8rGLwZdA";
+        var coffeesoftware = "UCjcceQmjS4DKBW_J_1UANow";
+        return new ChannelContentProducer(youtubeClient, coffeesoftware);
     }
+}
 
+@JsonIgnoreProperties(ignoreUnknown = true)
+record VideoInfo(String title,
+                 String description,
+                 Instant publishedAt,
+                 String viewCount,
+                 String videoId) {
 
 }
 
@@ -79,6 +99,38 @@ record YoutubeResponse(List<Item> items) {
     }
 }
 
+
+
+
+
+@JsonIgnoreProperties(ignoreUnknown = true)
+record ChannelResponse(List<Item> items) {
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public record Item(String id, ContentDetails contentDetails) {
+        @JsonIgnoreProperties(ignoreUnknown = true)
+        public record ContentDetails(RelatedPlaylists relatedPlaylists) {
+            @JsonIgnoreProperties(ignoreUnknown = true)
+            public record RelatedPlaylists(String uploads) {
+            }
+        }
+    }
+}
+
+
+@JsonIgnoreProperties(ignoreUnknown = true)
+record PlaylistItemsResponse(List<Item> items, String nextPageToken) {
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    record Item(Snippet snippet) {
+        @JsonIgnoreProperties(ignoreUnknown = true)
+        record Snippet(String title, String description,
+                       String publishedAt,
+                       ResourceId resourceId) {
+            @JsonIgnoreProperties(ignoreUnknown = true)
+            public record ResourceId(String videoId) {
+            }
+        }
+    }
+}
 
 class YoutubeClient {
 
@@ -175,36 +227,6 @@ class YoutubeClient {
 }
 
 
-@JsonIgnoreProperties(ignoreUnknown = true)
-record ChannelResponse(List<Item> items) {
-    @JsonIgnoreProperties(ignoreUnknown = true)
-    public record Item(String id, ContentDetails contentDetails) {
-        @JsonIgnoreProperties(ignoreUnknown = true)
-        public record ContentDetails(RelatedPlaylists relatedPlaylists) {
-            @JsonIgnoreProperties(ignoreUnknown = true)
-            public record RelatedPlaylists(String uploads) {
-            }
-        }
-    }
-}
-
-
-@JsonIgnoreProperties(ignoreUnknown = true)
-record PlaylistItemsResponse(List<Item> items, String nextPageToken) {
-    @JsonIgnoreProperties(ignoreUnknown = true)
-    record Item(Snippet snippet) {
-        @JsonIgnoreProperties(ignoreUnknown = true)
-        record Snippet(String title, String description,
-                       String publishedAt,
-                       ResourceId resourceId) {
-            @JsonIgnoreProperties(ignoreUnknown = true)
-            public record ResourceId(String videoId) {
-            }
-        }
-    }
-}
-
-
 class ChannelContentProducer implements ContentProducer {
 
     private final YoutubeClient youtubeClient;
@@ -247,9 +269,7 @@ class ChannelContentProducer implements ContentProducer {
     }
 }
 
-/**
- * @author Josh Long
- */
+
 class PlaylistContentProducer implements ContentProducer {
 
     private final YoutubeClient youtubeClient;
@@ -292,13 +312,5 @@ class PlaylistContentProducer implements ContentProducer {
             throw new RuntimeException(e);
         }
     }
-}
-
-record VideoInfo(String title,
-                 String description,
-                 Instant publishedAt,
-                 String viewCount,
-                 String videoId) {
-
 }
 
