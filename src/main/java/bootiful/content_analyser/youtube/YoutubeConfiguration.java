@@ -34,9 +34,6 @@ import java.util.List;
 })
 class YoutubeConfiguration {
 
-
-
-
     @Bean
     YoutubeClient youTubeClient(RestTemplate restTemplate, ContentAnalyserProperties properties) {
         return new YoutubeClient(restTemplate, properties.youtubeApiKey());
@@ -299,8 +296,15 @@ class PlaylistContentProducer implements ContentProducer {
                 youtubeVideoUrlFor(videoId),
                 new Date(Instant.parse(snippet.publishedAt()).toEpochMilli()),
                 "video",
-                Integer.parseInt(youtubeClient.getVideoStatistics(videoId).items().getFirst().statistics().viewCount())
+                defaultViewCountFor(youtubeClient.getVideoStatistics(videoId))
         );
+    }
+
+    private static int defaultViewCountFor(VideoStatsResponse vsri) {
+        var vsr = vsri.items();
+        if (vsr != null && !vsr.isEmpty())
+            return Integer.parseInt(vsr.getFirst().statistics().viewCount());
+        return 0;
     }
 
 

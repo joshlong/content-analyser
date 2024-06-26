@@ -11,10 +11,10 @@ import org.springframework.boot.ApplicationRunner;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
+import org.springframework.context.ApplicationContext;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.ClassPathScanningCandidateComponentProvider;
 import org.springframework.context.annotation.ImportRuntimeHints;
-import org.springframework.core.env.Environment;
 import org.springframework.core.io.FileSystemResource;
 import org.springframework.core.io.Resource;
 import org.springframework.util.Assert;
@@ -46,7 +46,7 @@ public class ContentAnalyserApplication {
     }
 
     @Bean
-    ApplicationRunner contentApplicationRunner(Environment environment, Map<String, ContentProducer> producerMap) {
+    ApplicationRunner contentApplicationRunner(ApplicationContext ac, Map<String, ContentProducer> producerMap) {
         return args -> {
             var start = beginningOfTheYear();
             var file = new File(new File(System.getenv("HOME"), "Desktop"), "csv");
@@ -61,12 +61,15 @@ public class ContentAnalyserApplication {
 
                 try {
                     write(content, resource);
+                    System.out.println( "wrote " + csv.getAbsolutePath()  +'.');
                 } catch (Exception e) {
                     throw new RuntimeException(e);
                 }
                 Assert.state(resource.exists(), "the resource [" +
                     resource.getFile().getAbsolutePath() + "] does not exist");
             });
+            System.out.println("all done!");
+            SpringApplication.exit(ac);
         };
     }
 
